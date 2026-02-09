@@ -16,9 +16,9 @@ module.exports = (req, res, next) => {
     
     try {
         // Log para confirmar la clave secreta que se está usando
-        console.log('Usando Secret:', process.env.JWT_SECRET ? 'Configurado ✅' : 'No encontrado ❌');
+        console.log('Usando Secret:', process.env.margarita22 ? 'Configurado ✅' : 'No encontrado ❌');
         
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        const decoded = jwt.verify(token, process.env.margarita22);
         req.usuario = decoded;
         
         console.log('✅ Token válido para usuario ID:', decoded.id);
