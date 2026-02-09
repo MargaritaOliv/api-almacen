@@ -3,8 +3,8 @@ const cors = require('cors');
 require('dotenv').config();
 
 const sequelize = require('./src/config/db');
-require('./src/models/User');
-require('./src/models/Prenda');
+const User = require('./src/models/User');
+const Prenda = require('./src/models/Prenda');
 
 const authRoutes = require('./src/routes/authRoutes');
 const ropaRoutes = require('./src/routes/ropaRoutes');
@@ -16,13 +16,13 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+User.hasMany(Prenda, { foreignKey: 'userId' });
+Prenda.belongsTo(User, { foreignKey: 'userId' });
 app.use('/api/auth', authRoutes);
-
 app.use('/api/prendas', authMiddleware, ropaRoutes);
 
 const PORT = process.env.PORT || 3000;
-
-sequelize.sync({ force: false })
+sequelize.sync({ alter: true })
     .then(() => {
         console.log('--------------------------------------------------');
         console.log('✅ Conexión a MySQL exitosa y tablas sincronizadas');
