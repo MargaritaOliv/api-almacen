@@ -9,7 +9,22 @@ exports.register = async (req, res) => {
         const hashedPassword = await bcrypt.hash(password, salt);
         
         const user = await User.create({ nombre, email, password: hashedPassword });
-        res.status(201).json({ msg: "Usuario creado", userId: user.id });
+
+        // CAMBIO: Generamos el token inmediatamente al registrarse
+        // para que la App Android pueda guardarlo si lo necesita.
+        const token = jwt.sign(
+            { id: user.id }, 
+            process.env.JWT_SECRET, 
+            { expiresIn: '8h' }
+        );
+
+        res.status(201).json({ 
+            msg: "Usuario creado", 
+            userId: user.id,
+            token: token,     // Enviamos el token
+            user: { id: user.id, nombre: user.nombre } 
+        });
+
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -24,7 +39,13 @@ exports.login = async (req, res) => {
         const isMatch = await bcrypt.compare(password, user.password);
         if (!isMatch) return res.status(400).json({ msg: "Credenciales inválidas" });
 
-        const token = jwt.sign({ id: user.id }, 'margarita22', { expiresIn: '8h' });
+        // CAMBIO: Usamos process.env.JWT_SECRET
+        const token = jwt.sign(
+            { id: user.id }, 
+            process.env.JWT_SECRET, 
+            { expiresIn: '8h' }
+        );
+        
         res.json({ token, user: { id: user.id, nombre: user.nombre } });
     } catch (error) {
         res.status(500).json({ error: error.message });

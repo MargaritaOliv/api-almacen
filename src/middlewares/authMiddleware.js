@@ -3,26 +3,24 @@ const jwt = require('jsonwebtoken');
 module.exports = (req, res, next) => {
     const authHeader = req.header('Authorization');
     
-    // Log para ver si llega el header
+    // Log para depuración
     console.log('--- Verificando Token ---');
-    console.log('Authorization Header:', authHeader);
 
     if (!authHeader) {
-        console.log('❌ Acceso denegado: No se proporcionó header');
         return res.status(401).json({ msg: "Acceso denegado. No hay token." });
     }
 
-    const token = authHeader.split(' ')[1];
-    
     try {
-        // Log para confirmar la clave secreta que se está usando
-        console.log('Usando Secret:', process.env.margarita22 ? 'Configurado ✅' : 'No encontrado ❌');
+        const token = authHeader.split(' ')[1];
         
-        const decoded = jwt.verify(token, process.env.margarita22);
+        // CAMBIO IMPORTANTE: Usar process.env.JWT_SECRET
+        // Esto debe coincidir con lo que pusimos en authController y .env
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        
         req.usuario = decoded;
-        
-        console.log('✅ Token válido para usuario ID:', decoded.id);
+        console.log('✅ Token válido. Usuario ID:', decoded.id);
         next();
+
     } catch (error) {
         console.log('❌ Error al verificar token:', error.message);
         res.status(401).json({ 
