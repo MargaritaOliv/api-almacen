@@ -1,18 +1,20 @@
 const Prenda = require('../models/Prenda');
+const cloudinary = require('../config/cloudinary');
 
 exports.getAll = async (req, res) => {
     try {
-        // FILTRO: Solo devolver prendas del usuario logueado
         const prendas = await Prenda.findAll({
             where: { userId: req.usuario.id }
         });
         res.json(prendas);
-    } catch (error) { res.status(500).json({ error: error.message }); }
+    } catch (error) { 
+        console.error(error);
+        res.status(500).json({ error: error.message }); 
+    }
 };
 
 exports.getById = async (req, res) => {
     try {
-        // FILTRO: Buscar por ID de prenda Y ID de usuario
         const prenda = await Prenda.findOne({
             where: { 
                 id: req.params.id,
@@ -22,71 +24,138 @@ exports.getById = async (req, res) => {
         
         if (!prenda) return res.status(404).json({ msg: "No encontrada o no tienes permiso" });
         res.json(prenda);
-    } catch (error) { res.status(500).json({ error: error.message }); }
+    } catch (error) { 
+        console.error(error);
+        res.status(500).json({ error: error.message }); 
+    }
 };
 
 exports.create = async (req, res) => {
     try {
-        // ASIGNACIÓN: Agregamos el userId del token a los datos de la prenda
+
+        console.log("----- CREANDO PRENDA -----");
+        console.log("BODY:", req.body);
+        console.log("FILE:", req.file);
+
         const nuevaPrenda = {
             ...req.body,
             userId: req.usuario.id
         };
+
+        if (req.file) {
+
+            const imagenUrl = req.file.path || req.file.secure_url || null;
+            const imagenId = req.file.filename || req.file.public_id || null;
+
+            nuevaPrenda.imagen_url = imagenUrl;
+            nuevaPrenda.imagen_id = imagenId;
+        }
+
         const prenda = await Prenda.create(nuevaPrenda);
+
         res.status(201).json(prenda);
-    } catch (error) { res.status(500).json({ error: error.message }); }
+
+    } catch (error) { 
+        console.error("ERROR CREATE:", error);
+        res.status(500).json({ error: error.message }); 
+    }
 };
 
 exports.update = async (req, res) => {
     try {
-        // SEGURIDAD: Solo actualizar si coincide el ID y el userId
-        const resultado = await Prenda.update(req.body, { 
-            where: { 
+        const prenda = await Prenda.findOne({
+            where: {
                 id: req.params.id,
-                userId: req.usuario.id 
-            } 
+                userId: req.usuario.id
+            }
         });
 
-        if (resultado[0] === 0) {
-            return res.status(404).json({ msg: "No se pudo actualizar (No encontrada o sin permiso)" });
+        if (!prenda) return res.status(404).json({ msg: "No encontrada o sin permiso" });
+
+        if (req.file) {
+
+            try {
+                if (prenda.imagen_id) {
+                    await cloudinary.uploader.destroy(prenda.imagen_id);
+                }
+            } catch (errDestroy) {
+                console.error('Error al eliminar imagen previa en Cloudinary:', errDestroy);
+            }
+
+            const imagenUrl = req.file.path || req.file.secure_url;
+            const imagenId = req.file.filename || req.file.public_id;
+
+            prenda.imagen_url = imagenUrl;
+            prenda.imagen_id = imagenId;
         }
 
-        res.json({ msg: "Actualizado correctamente" });
-    } catch (error) { res.status(500).json({ error: error.message }); }
+        const updates = {};
+        ['nombre','categoria','talla','precio','stock'].forEach(k=>{
+            if (req.body[k] !== undefined) updates[k] = req.body[k];
+        });
+
+        await prenda.update({
+            ...updates,
+            imagen_url: prenda.imagen_url,
+            imagen_id: prenda.imagen_id
+        });
+
+        res.json(prenda);
+
+    } catch (error) { 
+        console.error(error);
+        res.status(500).json({ error: error.message }); 
+    }
 };
 
 exports.delete = async (req, res) => {
     try {
-        // SEGURIDAD: Solo eliminar si coincide el ID y el userId
-        const deleted = await Prenda.destroy({ 
-            where: { 
+        const prenda = await Prenda.findOne({
+            where: {
                 id: req.params.id,
-                userId: req.usuario.id 
-            } 
+                userId: req.usuario.id
+            }
         });
 
-        if (!deleted) return res.status(404).json({ msg: "No encontrada o sin permiso" });
-        
+        if (!prenda) return res.status(404).json({ msg: "No encontrada o sin permiso" });
+
+        if (prenda.imagen_id) {
+            try {
+                await cloudinary.uploader.destroy(prenda.imagen_id);
+            } catch (errDestroy) {
+                console.error('Error al eliminar imagen en Cloudinary:', errDestroy);
+            }
+        }
+
+        await prenda.destroy();
+
         res.json({ msg: "Eliminado correctamente" });
-    } catch (error) { res.status(500).json({ error: error.message }); }
+
+    } catch (error) { 
+        console.error(error);
+        res.status(500).json({ error: error.message }); 
+    }
 };
 
-// Métodos específicos
 exports.getByCategoria = async (req, res) => {
     try {
         const prendas = await Prenda.findAll({ 
             where: { 
                 categoria: req.params.categoria,
-                userId: req.usuario.id // Filtro de usuario
+                userId: req.usuario.id 
             } 
         });
+
         res.json(prendas);
-    } catch (error) { res.status(500).json({ error: error.message }); }
+
+    } catch (error) { 
+        console.error(error);
+        res.status(500).json({ error: error.message }); 
+    }
 };
 
 exports.patchStock = async (req, res) => {
     try {
-        // Primero buscamos asegurando que pertenezca al usuario
         const prenda = await Prenda.findOne({
             where: { 
                 id: req.params.id,
@@ -96,8 +165,20 @@ exports.patchStock = async (req, res) => {
 
         if (!prenda) return res.status(404).json({ msg: "No encontrada" });
         
-        prenda.stock += req.body.cantidad;
+        const cantidad = Number(req.body.cantidad || 0);
+
+        if (isNaN(cantidad)) {
+            return res.status(400).json({ msg: "cantidad inválida" });
+        }
+
+        prenda.stock += cantidad;
+
         await prenda.save();
+
         res.json(prenda);
-    } catch (error) { res.status(500).json({ error: error.message }); }
+
+    } catch (error) { 
+        console.error(error);
+        res.status(500).json({ error: error.message }); 
+    }
 };
